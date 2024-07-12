@@ -1,13 +1,7 @@
-import os
-from typing import Any 
-import numpy as np
-from scipy.ndimage import zoom
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import imageio
-from einops import repeat
-from icecream import ic
+
 
 class Focal_loss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2, num_classes=3, size_average=True):
@@ -15,11 +9,11 @@ class Focal_loss(nn.Module):
         self.size_average = size_average
         if isinstance(alpha, list):
             assert len(alpha) == num_classes
-            print(f'Focal loss alpha={alpha}, will assign alpha values for each class')
+            print(f"Focal loss alpha={alpha}, will assign alpha values for each class")
             self.alpha = torch.Tensor(alpha)
         else:
             assert alpha < 1
-            print(f'Focal loss alpha={alpha}, will shrink the impact in background')
+            print(f"Focal loss alpha={alpha}, will shrink the impact in background")
             self.alpha = torch.zeros(num_classes)
             self.alpha[0] = alpha
             self.alpha[1:] = 1 - alpha
@@ -48,8 +42,10 @@ class Focal_loss(nn.Module):
         else:
             loss = loss.sum()
         return loss
-    
+
+
 # class focal_loss()
+
 
 class DiceLoss_softmax(nn.Module):
     def __init__(self):
@@ -63,7 +59,7 @@ class DiceLoss_softmax(nn.Module):
             tensor_list.append(temp_prob.unsqueeze(1))
         output_tensor = torch.cat(tensor_list, dim=1)
         return output_tensor.float()
-    
+
     def _dice_loss(self, score, target):
         target = target.float()
         smooth = 1e-5
@@ -73,22 +69,25 @@ class DiceLoss_softmax(nn.Module):
         loss = (2 * intersect + smooth) / (z_sum + y_sum + smooth)
         loss = 1 - loss
         return loss
-    
+
     def forward(self, inputs, target, softmax=False):
         inputs = inputs.unsqueeze(1)
-        inputs = torch.concat([torch.ones_like(inputs)-inputs, inputs], dim=1)
+        inputs = torch.concat([torch.ones_like(inputs) - inputs, inputs], dim=1)
         if softmax:
             inputs = torch.softmax(inputs, dim=1)
         target = self._one_hot_encoder(target)
 
-        assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(), target.size())
+        assert (
+            inputs.size() == target.size()
+        ), "predict {} & target {} shape do not match".format(
+            inputs.size(), target.size()
+        )
         loss = 0.0
         for i in range(0, self.num_classes):
             dice = self._dice_loss(inputs[:, i], target[:, i])
             loss += dice
-        return loss #/ self.num_classes
+        return loss  # / self.num_classes
 
-    
 
 class DiceLoss(nn.Module):
     def __init__(self):
@@ -99,5 +98,5 @@ class DiceLoss(nn.Module):
         inputs = inputs.view(-1)
         target = target.view(-1)
         intersection = (inputs * target).sum()
-        dice = (2.*intersection + smooth)/(inputs.sum() + target.sum() + smooth)
+        dice = (2.0 * intersection + smooth) / (inputs.sum() + target.sum() + smooth)
         return 1 - dice

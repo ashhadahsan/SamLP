@@ -9,8 +9,8 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from utils import Focal_loss, DiceLoss, DiceLoss_softmax
-from datasets.dataset_ufpr_sam import UFPR_ALPR_Dataset, SamTransform, collater
+from sam_lp.train.utils import Focal_loss, DiceLoss, DiceLoss_softmax
+from sam_lp.datasets.dataset_ufpr_sam import UFPR_ALPR_Dataset, SamTransform, collater
 
 
 def calc_loss(outputs_logits, low_res_label_batch, loss_fn, param=None):

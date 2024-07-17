@@ -8,12 +8,12 @@ import numpy as np
 import torch
 
 from segment_anything.modeling import Sam
-from sam_lora_image_encoder_mask_decoder import LoRA_Sam
+from sam_lp.lora.sam_lora_image_encoder_mask_decoder import LoRA_Sam
 # from sam_lora_image_encoder import LoRA_Sam
 
 from typing import Optional, Tuple
 
-from datasets.dataset_ufpr_sam import SamTransform
+from sam_lp.datasets.dataset_ufpr_sam import SamTransform
 from segment_anything.utils.transforms import ResizeLongestSide
 
 

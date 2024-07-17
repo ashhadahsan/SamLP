@@ -208,11 +208,12 @@ class UFPR_ALPR_Dataset(data.Dataset):
             data = f.read()
 
         lines = data.replace("\t", "").replace("-", "").split("\n")
+  
         for line in lines:
             line_split = line.split(":")
             prop = line_split[0].strip()
             data = line_split[1].strip()
-            if prop == "position_plate":
+            if prop == "position_vehicle":
                 data = data.split(" ")
                 data = np.array(data, dtype=np.float32)
                 label = data.reshape((1, 4))
@@ -250,7 +251,7 @@ if __name__ == "__main__":
     #                                [RandomGenerator(output_size=[512, 512], low_res=[128, 128])]))
 
     db_train = UFPR_ALPR_Dataset(
-        root="/media/disk1/yxding/dhx/Dataset/UFPR-ALPR/",
+        root="/tmp/ahsan/sqfs/storage_local/datasets/public/ufpr-alpr/",
         split="training",
         transform=SamTransform(1024),
     )

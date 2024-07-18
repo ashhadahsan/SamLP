@@ -202,22 +202,40 @@ class UFPR_ALPR_Dataset(data.Dataset):
         img = img.astype(np.uint8)
         return img
 
-    def load_annotations(self, path):
+    # def load_annotations(self, path):#original function, was giving the vehicle coordinates
+    #     file = path.replace("png", "txt")
+    #     with open(file, "r") as f:
+    #         data = f.read()
+
+    #     lines = data.replace("\t", "").replace("-", "").split("\n")
+
+    #     for line in lines:
+    #         line_split = line.split(":")
+    #         prop = line_split[0].strip()
+    #         data = line_split[1].strip()
+    #         if prop == "position_vehicle":
+    #             data = data.split(" ")
+    #             data = np.array(data, dtype=np.float32)
+    #             label = data.reshape((1, 4))
+
+    #     return label
+    def load_annotations(self, path):  # this gets the bounding boxes of number plates
         file = path.replace("png", "txt")
         with open(file, "r") as f:
             data = f.read()
+        coordinates = data.splitlines()[7].split(":")[1].strip().split(" ")
+        corners = []
+        for coord in coordinates:
+            x, y = coord.split(",")
+            corners.append((int(x), int(y)))
+        corners = np.array(corners, dtype=np.float32)
+        x_min = np.min(corners[:, 0])
+        y_min = np.min(corners[:, 1])
+        x_max = np.max(corners[:, 0])
+        y_max = np.max(corners[:, 1])
 
-        lines = data.replace("\t", "").replace("-", "").split("\n")
-  
-        for line in lines:
-            line_split = line.split(":")
-            prop = line_split[0].strip()
-            data = line_split[1].strip()
-            if prop == "position_vehicle":
-                data = data.split(" ")
-                data = np.array(data, dtype=np.float32)
-                label = data.reshape((1, 4))
-
+        label = np.array([x_min, y_min, x_max, y_max])
+        label = label.reshape((1, 4))
         return label
 
     def plate_mask(self, img, annot):

@@ -10,8 +10,8 @@ from segment_anything import sam_model_registry
 from sam_lp.train.trainer import trainer_UFPR
 import time
 from sam_lp.lora.sam_lora_image_encoder_mask_decoder import LoRA_Sam
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--root_path",
@@ -41,7 +41,6 @@ parser.add_argument("--AdamW", action="store_true")
 parser.add_argument("--module", type=str, default="sam_lora_image_encoder_mask_decoder")
 parser.add_argument("--dice_param", type=float, default=0.8)
 args = parser.parse_args()
-
 if not args.deterministic:
     cudnn.benchmark = True
     cudnn.deterministic = False
@@ -89,7 +88,9 @@ predictor = LoRA_SamPredictor(net)
 if args.lora_ckpt is not None:
     predictor.model.load_lora_parameters(args.lora_ckpt)
 
-multimask_output = True
-download_model()
-trainer = {"UFPR": trainer_UFPR}
-trainer[dataset_name](args, predictor, log_path, multimask_output)
+
+def main():
+    multimask_output = True
+    download_model()
+    trainer = {"UFPR": trainer_UFPR}
+    trainer[dataset_name](args, predictor, log_path, multimask_output)

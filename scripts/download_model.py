@@ -12,6 +12,7 @@ def download_model():
     if not os.path.exists(cpkt_path):
         print("Checkpoint does not exist...")
         print("Downloding model..")
+        os.makedirs(cpkt_path)
         with open(cpkt_path, "wb") as f:
             f.write(response.content)
     else:

@@ -88,23 +88,26 @@ def compute_ap(precision, recall):
 
 
 def iou(a, b):
-    left1, top1, right1, down1 = a[0], a[1], a[2], a[3]
-    left2, top2, right2, down2 = b[0], b[1], b[2], b[3]
+    # Unpack the coordinates
+    x1, y1, x2, y2 = a
+    x3, y3, x4, y4 = b
 
-    area1 = (right1 - left1) * (top1 - down1)
-    area2 = (right2 - left2) * (top2 - down2)
-    area_sum = area1 + area2
+    # Calculate intersection coordinates
+    xi1 = max(x1, x3)
+    yi1 = max(y1, y3)
+    xi2 = min(x2, x4)
+    yi2 = min(y2, y4)
+    inter_area = max(xi2 - xi1, 0) * max(yi2 - yi1, 0)
 
-    left = max(left1, left2)
-    right = min(right1, right2)
-    top = max(top1, top2)
-    bottom = min(down1, down2)
+    # Calculate union area
+    box1_area = (x2 - x1) * (y2 - y1)
+    box2_area = (x4 - x3) * (y4 - y3)
+    union_area = box1_area + box2_area - inter_area
 
-    if left >= right or top >= bottom:
-        return 0
-    else:
-        inter = (right - left) * (top - bottom)
-        return inter / (area_sum - inter)
+    # Compute IoU
+    iou = inter_area / union_area if union_area != 0 else 0
+
+    return iou
 
 
 def mask2bbox(mask, is_gt):
@@ -155,14 +158,17 @@ def evaluation(pred, label, mask_iou):
     gt_count += len(label_bboxes)
     pred_count += len(pred_bboxes)
 
+    print(f"GT count: {len(label_bboxes)}, Pred count: {len(pred_bboxes)}")
+
     if len(pred_bboxes) == 0:
         FN += 1
     else:
         for gt in label_bboxes:
             is_true = False
             for pred in pred_bboxes:
-                # print(iou(pred, gt))
-                if iou(pred, gt) >= 0.5:
+                current_iou = iou(pred, gt)
+                print(f"IoU between {pred} and {gt}: {current_iou}")
+                if current_iou >= 0.5:
                     is_true = True
             if is_true:
                 TP += 1
@@ -176,7 +182,6 @@ def evaluation(pred, label, mask_iou):
 
 
 def inference(args, multimask_output, predictor, test_save_path):
-    # testset = UFPR_ALPR_Dataset(root=args.root_path, split='testing', transform=transforms.Compose([Resizer([args.img_size, args.img_size])]))
     testset = UFPR_ALPR_Dataset(
         root=args.root_path, split="testing", transform=SamTransformTest(1024)
     )
@@ -189,14 +194,11 @@ def inference(args, multimask_output, predictor, test_save_path):
         collate_fn=collater,
         pin_memory=True,
     )
-    # trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, collate_fn=collater, pin_memory=True, worker_init_fn=worker_init_fn)
 
     logging.info(f"{len(testloader)} test iterations per epoch")
     predictor.model.eval()
 
     for i_batch, sample_batch in tqdm(enumerate(testloader)):
-        # print(sample_batch.keys())
-
         with torch.no_grad():
             image, label = sample_batch["image"].cuda(), sample_batch["label"].cuda()
 
@@ -204,9 +206,7 @@ def inference(args, multimask_output, predictor, test_save_path):
                 image.squeeze(0) * predictor.pixel_std.cuda()
                 + predictor.pixel_mean.cuda()
             )
-            # h, w = image.shape[2], image.shape[3]
             label = label.unsqueeze(0).unsqueeze(1)
-
             label = (
                 predictor.model.sam.postprocess_masks(
                     label, predictor.input_size, predictor.original_size
@@ -220,15 +220,13 @@ def inference(args, multimask_output, predictor, test_save_path):
             masks, iou_predictions, low_res_masks = predictor.forward_test(
                 image, multimask_output
             )
-            bset_idx = torch.argmax(iou_predictions)
+            best_idx = torch.argmax(iou_predictions)
             masks = masks.squeeze()
             iou_predictions = iou_predictions.squeeze()
-            best_idx = torch.argmax(iou_predictions)
-            # masks = masks[best_idx]
             mask_iou = iou_predictions[best_idx]
-            # print(iou_predictions.shape)
-            # raise
-            mask = masks[bset_idx].squeeze().detach().cpu().numpy()
+            mask = masks[best_idx].squeeze().detach().cpu().numpy()
+
+            print(f"Batch {i_batch}: Best mask IoU prediction: {mask_iou.item()}")
 
             min_area = 2500
             mask, _ = remove_small_regions(mask, min_area, "islands")
@@ -248,7 +246,6 @@ def inference(args, multimask_output, predictor, test_save_path):
                 .cpu()
                 .numpy()
             )
-            # image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
             show_mask = np.expand_dims(mask.copy(), axis=2).astype(np.uint8)
             show_mask = cv2.cvtColor(show_mask, cv2.COLOR_GRAY2BGR)
             results = cv2.addWeighted(
@@ -287,49 +284,46 @@ def inference(args, multimask_output, predictor, test_save_path):
         "F1: {:.4f}\t".format(F1),
         "AP50: {:.4f}\t".format(AP50),
     )
-    # return  P, R, F1, AP50
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--root_path",
+    type=str,
+    default="/tmp/ahsan/sqfs/storage_local/datasets/public/ufpr-alpr",
+)
+parser.add_argument("--dataset", type=str, default="UFPR")
+parser.add_argument("-num_classes", type=int, default=1)
+parser.add_argument("--img_size", type=int, default=1024)
+parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("--save_image", action="store_true")
+parser.add_argument("--deterministic", type=int, default=1)
+parser.add_argument("--ckpt", type=str, default="./checkpoints/sam_vit_b_01ec64.pth")
+parser.add_argument(
+    "--lora_ckpt",
+    type=str,
+    default="/home/ahsan/SamLP/exp/UFPR_1024_2024-07-24-14:23:15_vit_b_sam_lora_image_encoder_mask_decoder_cls1_epo10_bs2_lr0.005_seed0_rank2/epoch_10.pth",
+)
+parser.add_argument("--vit_name", type=str, default="vit_b")
+parser.add_argument("--rank", type=int, default=4)
+parser.add_argument("--module", type=str, default="sam_lora_image_encoder_mask_decoder")
+
+args = parser.parse_args()
+
+if not args.deterministic:
+    cudnn.benchmark = True
+    cudnn.deterministic = False
+else:
+    cudnn.benchmark = False
+    cudnn.deterministic = True
+
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed(args.seed)
 
 
 def evaluate():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--root_path",
-        type=str,
-        default="/tmp/ahsan/sqfs/storage_local/datasets/public/ufpr-alpr",
-    )
-    parser.add_argument("--dataset", type=str, default="UFPR")
-    parser.add_argument("-num_classes", type=int, default=1)
-    parser.add_argument("--img_size", type=int, default=1024)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--save_image", action="store_true")
-    parser.add_argument("--deterministic", type=int, default=1)
-    parser.add_argument(
-        "--ckpt", type=str, default="./checkpoints/sam_vit_b_01ec64.pth"
-    )
-    parser.add_argument(
-        "--lora_ckpt",
-        type=str,
-        default="/home/ahsan/SamLP/exp/UFPR_1024_2024-07-17-12:55:01_vit_b_sam_lora_image_encoder_mask_decoder_cls1_epo10_bs2_lr0.005_seed0_rank2/epoch_10.pth",
-    )
-    parser.add_argument("--vit_name", type=str, default="vit_b")
-    parser.add_argument("--rank", type=int, default=4)
-    parser.add_argument(
-        "--module", type=str, default="sam_lora_image_encoder_mask_decoder"
-    )
-
-    args = parser.parse_args()
-
-    if not args.deterministic:
-        cudnn.benchmark = True
-        cudnn.deterministic = False
-    else:
-        cudnn.benchmark = False
-        cudnn.deterministic = True
-
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
     dataset_name = args.dataset
     dataset_config = {
         "UFPR": {

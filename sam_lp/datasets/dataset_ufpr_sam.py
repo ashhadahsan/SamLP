@@ -6,6 +6,7 @@ import torch
 import random
 from torchvision.transforms.functional import resize, to_pil_image, rotate, hflip, vflip  # type: ignore
 from torch.nn import functional as F
+import matplotlib.pyplot as plt
 
 
 def random_rot_flip_torch(image, label):
@@ -241,12 +242,39 @@ class UFPR_ALPR_Dataset(data.Dataset):
     def plate_mask(self, img, annot):
         h, w = img.shape[0], img.shape[1]
         mask = np.zeros((h, w))
-        mask[
-            int(annot[:, 1]) : int(annot[:, 1] + annot[:, 3]),
-            int(annot[:, 0]) : int(annot[:, 0] + annot[:, 2]),
-        ] = 1
+
+        x_min, y_min, x_max, y_max = annot[0]
+
+        mask[int(y_min) : int(y_max), int(x_min) : int(x_max)] = 1
         mask = mask.astype(np.uint8)
         return mask
+
+    def save_and_plot_img_with_mask(self, mask, annotations, path):
+        img = self.load_image(path=path)
+        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+        x_min, y_min, x_max, y_max = annotations[0]
+
+        ax[0].imshow(img)
+        rect = plt.Rectangle(
+            (x_min, y_min),
+            x_max - x_min,
+            y_max - y_min,
+            linewidth=2,
+            edgecolor="r",
+            facecolor="none",
+        )
+        ax[0].add_patch(rect)
+        ax[0].set_title("Image with Bounding Box")
+
+        # Mask
+        ax[1].imshow(mask, cmap="gray")
+        ax[1].set_title("Mask")
+        dirs = os.path.join(os.getcwd(), "sam_lp", "datasets", "output")
+        os.makedirs(dirs, exist_ok=True)
+        fname = path.split("/")[-1]
+        path = os.path.join(dirs, fname)
+
+        plt.savefig(path, bbox_inches="tight", pad_inches=0)
 
     def __len__(self):
         return len(self.image_list)
@@ -256,6 +284,7 @@ class UFPR_ALPR_Dataset(data.Dataset):
         img = self.load_image(path)
         plate_annot = self.load_annotations(path)
         mask = self.plate_mask(img, plate_annot)
+        self.save_and_plot_img_with_mask(mask=mask, annotations=plate_annot, path=path)
         sample = {"image": img, "label": mask}
         if self.transform:
             sample = self.transform(sample)
